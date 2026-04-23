@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reactor MQTT Dashboard</title>
+    <style>
+        :root {
+            --bg-1: #08111f;
+            --bg-2: #10243d;
+            --panel: rgba(8, 18, 34, 0.82);
+            --panel-border: rgba(133, 179, 255, 0.18);
+            --text-main: #ecf4ff;
+            --text-soft: #aac3e7;
+            --accent-cold: #4bc2ff;
+            --accent-hot: #ff6f4d;
+            --accent-gold: #ffd166;
+            --ok: #63e6be;
+            --warn: #ff9f43;
+            --error: #ff5d73;
+            --shadow: 0 18px 60px rgba(0, 0, 0, 0.3);
+            --font-main: "Segoe UI Variable", "Bahnschrift", "Trebuchet MS", sans-serif;
+            --font-mono: "Consolas", "Cascadia Mono", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: var(--font-main);
+            color: var(--text-main);
+            background:
+                radial-gradient(circle at top right, rgba(255, 111, 77, 0.18), transparent 28%),
+                radial-gradient(circle at left center, rgba(75, 194, 255, 0.18), transparent 34%),
+                linear-gradient(135deg, var(--bg-1), var(--bg-2) 58%, #173152);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 26px 26px;
+            pointer-events: none;
+        }
+
+        .app-shell {
+            width: min(1440px, calc(100% - 32px));
+            margin: 24px auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.3fr 0.7fr;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .hero-main {
+            padding: 24px 28px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-main::after {
+            content: "";
+            position: absolute;
+            right: -60px;
+            top: -40px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 209, 102, 0.34), rgba(255, 111, 77, 0));
+        }
+
+        .eyebrow {
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-size: 12px;
+            color: var(--text-soft);
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: clamp(28px, 4vw, 44px);
+            line-height: 1.05;
+            max-width: 720px;
+        }
+
+        .lead {
+            margin: 0;
+            max-width: 760px;
+            color: var(--text-soft);
+            font-size: 16px;
+            line-height: 1.55;
+        }
+
+        .hero-side {
+            padding: 24px;
+            display: grid;
+            gap: 16px;
+            align-content: space-between;
+        }
+
+        .temp-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .temp-label {
+            font-size: 13px;
+            color: var(--text-soft);
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+
+        .temp-value {
+            font-size: clamp(52px, 6vw, 84px);
+            font-weight: 700;
+            line-height: 0.95;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .temp-unit {
+            font-size: 24px;
+            color: var(--accent-gold);
+            margin-top: 12px;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-soft);
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--warn);
+            box-shadow: 0 0 20px rgba(255, 159, 67, 0.5);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .control-group,
+        .period-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 12px 18px;
+            font: inherit;
+            font-size: 14px;
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            cursor: pointer;
+            transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        button.active {
+            background: linear-gradient(135deg, rgba(75, 194, 255, 0.24), rgba(255, 111, 77, 0.22));
+            border-color: rgba(255, 209, 102, 0.42);
+        }
+
+        button:disabled {
+            opacity: 0.56;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button:disabled:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: baseline;
+            padding: 22px 24px 0;
+        }
+
+        .panel-head h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .panel-head span {
+            color: var(--text-soft);
+            font-size: 13px;
+        }
+
+        .chart-wrap {
+            padding: 12px 18px 18px;
+            height: 360px;
+        }
+
+        .chart-telemetry {
+            padding: 0 18px 18px;
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 14px;
+        }
+
+        .chart-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            align-content: start;
+        }
+
+        .telemetry-card {
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            min-height: 88px;
+        }
+
+        .telemetry-card p {
+            margin: 0 0 10px;
+            color: var(--text-soft);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        .telemetry-card strong {
+            display: block;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.05;
+        }
+
+        .telemetry-card span {
+            display: block;
+            margin-top: 8px;
+            color: var(--text-soft);
+            font-size: 13px;
+        }
+
+        .feed-card {
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .feed-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .feed-head h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .feed-head span {
+            color: var(--text-soft);
+            font-size: 12px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .packet-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .packet-row {
+            display: grid;
+            grid-template-columns: 88px 1fr auto auto;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .packet-row time {
+            color: var(--text-soft);
+            font-size: 12px;
+            font-family: var(--font-mono);
+        }
+
+        .packet-row strong {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .packet-row span {
+            color: var(--text-soft);
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .telemetry-empty {
+            color: var(--text-soft);
+            font-size: 14px;
+            padding: 14px 4px;
+        }
+
+        .device-grid {
+            margin-bottom: 18px;
+        }
+
+        .device-panel-body {
+            padding: 12px 18px 22px;
+            display: grid;
+            grid-template-columns: 1.08fr 0.92fr;
+            gap: 16px;
+        }
+
+        .device-status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .device-status-card {
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            min-height: 92px;
+        }
+
+        .device-status-card.wide {
+            grid-column: 1 / -1;
+        }
+
+        .device-status-card p {
+            margin: 0 0 10px;
+            color: var(--text-soft);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        .device-status-card strong {
+            display: block;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.05;
+        }
+
+        .device-status-card span {
+            display: block;
+            margin-top: 8px;
+            color: var(--text-soft);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .device-command-box {
+            padding: 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .device-command-box h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+        }
+
+        .command-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin: 16px 0 14px;
+        }
+
+        .command-buttons button {
+            width: 100%;
+        }
+
+        .command-note {
+            margin: 0;
+            color: var(--text-soft);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .command-topic {
+            display: block;
+            margin: 14px 0 10px;
+            color: var(--accent-gold);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(99, 230, 190, 0.05), transparent),
+                rgba(255, 255, 255, 0.02);
+        }
+
+        .core-wrap {
+            padding: 12px 24px 24px;
+        }
+
+        .core-stage {
+            aspect-ratio: 1;
+            width: min(100%, 520px);
+            margin: 0 auto;
+            position: relative;
+        }
+
+        #reactorCore {
+            width: 100%;
+            height: 100%;
+            display: block;
+            filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.28));
+        }
+
+        .core-meta {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .metric {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .metric span {
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--text-soft);
+            margin-bottom: 8px;
+        }
+
+        .metric strong {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+
+        .info-card {
+            padding: 18px 20px;
+        }
+
+        .info-card p {
+            margin: 0 0 8px;
+            color: var(--text-soft);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        .info-card strong {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .info-card code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--accent-gold);
+        }
+
+        .error-banner {
+            margin-top: 14px;
+            padding: 14px 18px;
+            border-radius: 18px;
+            background: rgba(255, 93, 115, 0.14);
+            border: 1px solid rgba(255, 93, 115, 0.24);
+            color: #ffd7df;
+            display: none;
+        }
+
+        .footer-note {
+            margin-top: 18px;
+            text-align: center;
+            color: var(--text-soft);
+            font-size: 13px;
+        }
+
+        @media (max-width: 1100px) {
+            .hero,
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-telemetry {
+                grid-template-columns: 1fr;
+            }
+
+            .device-panel-body {
+                grid-template-columns: 1fr;
+            }
+
+            .info-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 720px) {
+            .app-shell {
+                width: min(100% - 18px, 1440px);
+                margin: 12px auto 18px;
+            }
+
+            .hero-main,
+            .hero-side,
+            .panel-head,
+            .core-wrap,
+            .info-card {
+                padding-left: 18px;
+                padding-right: 18px;
+            }
+
+            .chart-wrap {
+                height: 300px;
+                padding: 10px 12px 14px;
+            }
+
+            .chart-telemetry,
+            .chart-metrics,
+            .device-status-grid,
+            .command-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .core-meta,
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .temp-value {
+                font-size: 56px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="app-shell">
+        <section class="hero">
+            <article class="panel hero-main">
+                <div class="eyebrow">ESP32 + MQTT + Mosquitto + HTML Dashboard</div>
+                <h1>Локальный монитор реактора с обновлением данных каждую 1 секунду</h1>
+                <p class="lead">
+                    График N1 показывает историю температуры. График N2 показывает состояние 190
+                    шестигранных стержней: от полностью синего ядра при 0% до полностью красного
+                    при 100%.
+                </p>
+            </article>
+
+            <aside class="panel hero-side">
+                <div class="temp-card">
+                    <div class="temp-label">Текущая температура</div>
+                    <div class="temp-value">
+                        <span id="currentTemp">--.--</span>
+                        <span class="temp-unit">°C</span>
+                    </div>
+                </div>
+                <div class="status-row">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Ожидание первых данных</span>
+                </div>
+            </aside>
+        </section>
+
+        <section class="controls">
+            <div class="control-group">
+                <button id="togglePolling">Пауза</button>
+                <button id="forceRefresh">Обновить сейчас</button>
+            </div>
+
+            <div class="period-group" id="periodButtons">
+                <button data-period="1m">1 минута</button>
+                <button data-period="5m" class="active">5 минут</button>
+                <button data-period="10m">10 минут</button>
+                <button data-period="all">Все данные</button>
+            </div>
+        </section>
+
+        <section class="dashboard-grid">
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>График N1. Температура по времени</h2>
+                    <span id="historyCaption">Последние 5 минут</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="historyCanvas"></canvas>
+                </div>
+                <div class="chart-telemetry">
+                    <div class="chart-metrics">
+                        <article class="telemetry-card">
+                            <p>Минимум окна</p>
+                            <strong id="minTemp">--.-- °C</strong>
+                            <span id="windowSpan">Нет диапазона</span>
+                        </article>
+                        <article class="telemetry-card">
+                            <p>Максимум окна</p>
+                            <strong id="maxTemp">--.-- °C</strong>
+                            <span id="avgTemp">Среднее: --.-- °C</span>
+                        </article>
+                        <article class="telemetry-card">
+                            <p>Тренд</p>
+                            <strong id="trendLabel">Нет данных</strong>
+                            <span id="deltaTemp">Изменение: --.-- °C</span>
+                        </article>
+                    </div>
+                    <article class="feed-card">
+                        <div class="feed-head">
+                            <h3>Последние пакеты</h3>
+                            <span id="packetRate">0 pkt/min</span>
+                        </div>
+                        <div class="packet-list" id="packetList">
+                            <div class="telemetry-empty">Ожидание первых MQTT-сообщений.</div>
+                        </div>
+                    </article>
+                </div>
+            </article>
+
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>График N2. Состояние стержней</h2>
+                    <span id="coreCaption">190 шестигранных элементов</span>
+                </div>
+                <div class="core-wrap">
+                    <div class="core-stage">
+                        <svg id="reactorCore" viewBox="0 0 520 520" aria-label="Состояние реактора"></svg>
+                    </div>
+
+                    <div class="core-meta">
+                        <div class="metric">
+                            <span>Красные стержни</span>
+                            <strong id="activeRods">0 / 190</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Мощность</span>
+                            <strong id="powerPercent">-- %</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Потенциометр</span>
+                            <strong id="potValue">----</strong>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="info-grid">
+            <article class="panel info-card">
+                <p>Последняя метка времени</p>
+                <strong id="lastTimestamp">--:--:--</strong>
+            </article>
+
+            <article class="panel info-card">
+                <p>Свежесть данных</p>
+                <strong id="dataAge">Нет данных</strong>
+            </article>
+
+            <article class="panel info-card">
+                <p>Точек на графике</p>
+                <strong id="historyCount">0</strong>
+            </article>
+
+            <article class="panel info-card">
+                <p>MQTT</p>
+                <strong id="mqttState">Ожидание</strong>
+            </article>
+        </section>
+
+        <section class="device-grid">
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>Панель ESP32</h2>
+                    <span id="commandCaption">Сигналы контроллера и MQTT-команды</span>
+                </div>
+                <div class="device-panel-body">
+                    <div class="device-status-grid">
+                        <article class="device-status-card">
+                            <p>Пуск</p>
+                            <strong id="startState">Ожидание</strong>
+                            <span id="startMeta">Команда Пуск ещё не поступала</span>
+                        </article>
+                        <article class="device-status-card">
+                            <p>Стоп</p>
+                            <strong id="stopState">Ожидание</strong>
+                            <span id="stopMeta">Команда Стоп ещё не поступала</span>
+                        </article>
+                        <article class="device-status-card">
+                            <p>Авария</p>
+                            <strong id="emergencyState">Нет</strong>
+                            <span id="emergencyMeta">Аварийных сообщений не было</span>
+                        </article>
+                        <article class="device-status-card">
+                            <p>Синий LED</p>
+                            <strong id="blueLedState">Мигание выкл</strong>
+                            <span id="blueLedMeta">Команды с дашборда ещё не отправлялись</span>
+                        </article>
+                        <article class="device-status-card wide">
+                            <p>Последнее событие ESP32</p>
+                            <strong id="lastDeviceEvent">Ожидание MQTT-событий</strong>
+                            <span id="lastDeviceEventMeta">Контроллер ещё не прислал событий кнопок или аварии</span>
+                        </article>
+                    </div>
+
+                    <article class="device-command-box">
+                        <h3>Управление с дашборда</h3>
+                        <p class="command-note">
+                            Панель отправляет на ESP32 MQTT-команды Пуск, Стоп, Авария, Сброс аварии и управление синим LED.
+                            После выполнения контроллер возвращает событие в телеметрию, поэтому статусы ниже обновляются автоматически.
+                        </p>
+                        <div class="command-buttons">
+                            <button id="startCommand">Пуск</button>
+                            <button id="stopCommand">Стоп</button>
+                            <button id="emergencyCommand">Авария</button>
+                            <button id="resetEmergencyCommand">Сброс аварии</button>
+                            <button id="blueBlinkOn">Синий LED: мигание</button>
+                            <button id="blueBlinkOff">Синий LED: выкл</button>
+                        </div>
+                        <strong class="command-topic" id="commandTopicLabel">/devices/My_ESP32_ASMM/command</strong>
+                        <p class="command-note" id="lastCommandStatus">Команд ещё не было.</p>
+                    </article>
+                </div>
+            </article>
+        </section>
+
+        <div class="error-banner" id="errorBanner"></div>
+
+        <div class="footer-note">
+            Дашборд подключается к брокеру MQTT напрямую через WebSocket и автоматически пытается переподключиться при обрыве связи.
+        </div>
+    </main>
+
+    <script>
+        const BROKER_HOST = "192.168.0.21";
+        const MQTT_TCP_PORT = 1883;
+        const MQTT_WS_PORT = 8083;
+        const MQTT_TOPIC = "/devices/My_ESP32_ASMM/data";
+        const MQTT_COMMAND_TOPIC = "/devices/My_ESP32_ASMM/command";
+        const CLIENT_ID = `reactor-dashboard-${Math.random().toString(16).slice(2, 10)}`;
+        const KEEP_ALIVE_SECONDS = 30;
+        const RECONNECT_DELAY_MS = 3000;
+        const RENDER_INTERVAL_MS = 1000;
+        const HISTORY_PERIODS = {
+            "1m": { label: "Последняя 1 минута", periodSeconds: 60, limit: 120 },
+            "5m": { label: "Последние 5 минут", periodSeconds: 300, limit: 360 },
+            "10m": { label: "Последние 10 минут", periodSeconds: 600, limit: 720 },
+            "all": { label: "Все доступные данные", all: true, limit: 20000 }
+        };
+
+        const state = {
+            selectedPeriod: "5m",
+            pollingEnabled: true,
+            fullHistory: [],
+            history: [],
+            latest: null,
+            rods: [],
+            mqtt: {
+                socket: null,
+                connected: false,
+                subscribed: false,
+                reconnectTimer: null,
+                pingTimer: null,
+                packetId: 1,
+                lastError: null
+            },
+            device: {
+                startPressed: false,
+                startTimestamp: 0,
+                stopPressed: false,
+                stopTimestamp: 0,
+                emergencyActive: false,
+                emergencyTimestamp: 0,
+                blueBlinkEnabled: false,
+                blueCommandTimestamp: 0,
+                lastEventLabel: "Ожидание событий ESP32",
+                lastEventTimestamp: 0,
+                lastCommandLabel: "Команд ещё не было",
+                lastCommandTimestamp: 0
+            }
+        };
+
+        const elements = {
+            currentTemp: document.getElementById("currentTemp"),
+            statusDot: document.getElementById("statusDot"),
+            statusText: document.getElementById("statusText"),
+            historyCanvas: document.getElementById("historyCanvas"),
+            historyCaption: document.getElementById("historyCaption"),
+            minTemp: document.getElementById("minTemp"),
+            maxTemp: document.getElementById("maxTemp"),
+            avgTemp: document.getElementById("avgTemp"),
+            trendLabel: document.getElementById("trendLabel"),
+            deltaTemp: document.getElementById("deltaTemp"),
+            windowSpan: document.getElementById("windowSpan"),
+            packetRate: document.getElementById("packetRate"),
+            packetList: document.getElementById("packetList"),
+            commandCaption: document.getElementById("commandCaption"),
+            startState: document.getElementById("startState"),
+            startMeta: document.getElementById("startMeta"),
+            stopState: document.getElementById("stopState"),
+            stopMeta: document.getElementById("stopMeta"),
+            emergencyState: document.getElementById("emergencyState"),
+            emergencyMeta: document.getElementById("emergencyMeta"),
+            blueLedState: document.getElementById("blueLedState"),
+            blueLedMeta: document.getElementById("blueLedMeta"),
+            lastDeviceEvent: document.getElementById("lastDeviceEvent"),
+            lastDeviceEventMeta: document.getElementById("lastDeviceEventMeta"),
+            startCommand: document.getElementById("startCommand"),
+            stopCommand: document.getElementById("stopCommand"),
+            emergencyCommand: document.getElementById("emergencyCommand"),
+            resetEmergencyCommand: document.getElementById("resetEmergencyCommand"),
+            blueBlinkOn: document.getElementById("blueBlinkOn"),
+            blueBlinkOff: document.getElementById("blueBlinkOff"),
+            commandTopicLabel: document.getElementById("commandTopicLabel"),
+            lastCommandStatus: document.getElementById("lastCommandStatus"),
+            activeRods: document.getElementById("activeRods"),
+            powerPercent: document.getElementById("powerPercent"),
+            potValue: document.getElementById("potValue"),
+            lastTimestamp: document.getElementById("lastTimestamp"),
+            dataAge: document.getElementById("dataAge"),
+            historyCount: document.getElementById("historyCount"),
+            mqttState: document.getElementById("mqttState"),
+            errorBanner: document.getElementById("errorBanner"),
+            togglePolling: document.getElementById("togglePolling"),
+            forceRefresh: document.getElementById("forceRefresh"),
+            periodButtons: document.getElementById("periodButtons"),
+            reactorCore: document.getElementById("reactorCore"),
+            coreCaption: document.getElementById("coreCaption")
+        };
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function getCurrentTimestamp() {
+            return Math.floor(Date.now() / 1000);
+        }
+
+        function getMqttStatus() {
+            return {
+                connected: state.mqtt.connected,
+                subscribed: state.mqtt.subscribed,
+                last_error: state.mqtt.lastError,
+                broker: BROKER_HOST,
+                port: MQTT_TCP_PORT,
+                ws_port: MQTT_WS_PORT,
+                topic: MQTT_TOPIC,
+                command_topic: MQTT_COMMAND_TOPIC
+            };
+        }
+
+        function hasNumericKey(item, key) {
+            return item && Object.prototype.hasOwnProperty.call(item, key) && Number.isFinite(Number(item[key]));
+        }
+
+        function isMeasurementPayload(item) {
+            return hasNumericKey(item, "pot_value") && hasNumericKey(item, "power_percent");
+        }
+
+        function normalizeMeasurement(item, timestamp = getCurrentTimestamp()) {
+            if (!item || typeof item !== "object") {
+                return null;
+            }
+
+            const potValue = Number(item.pot_value);
+            const powerPercent = Number(item.power_percent);
+            const itemTimestamp = Number(item.timestamp);
+            const itemTemperature = Number(item.temperature);
+
+            if (!Number.isFinite(potValue) || !Number.isFinite(powerPercent)) {
+                throw new Error("MQTT payload must contain numeric pot_value and power_percent");
+            }
+
+            if (potValue < 0 || potValue > 4095) {
+                throw new Error(`pot_value out of range: ${potValue}`);
+            }
+
+            if (powerPercent < 0 || powerPercent > 100) {
+                throw new Error(`power_percent out of range: ${powerPercent}`);
+            }
+
+            const normalizedTimestamp = Number.isFinite(itemTimestamp)
+                ? itemTimestamp
+                : Number(timestamp);
+            const computedTemperature = Number((potValue * 100 / 4095).toFixed(2));
+
+            return {
+                timestamp: normalizedTimestamp,
+                pot_value: Math.round(potValue),
+                power_percent: Math.round(powerPercent),
+                temperature: Number.isFinite(itemTemperature)
+                    ? Number(itemTemperature.toFixed(2))
+                    : computedTemperature,
+                mqtt: getMqttStatus()
+            };
+        }
+
+        function measurementKey(item) {
+            if (!item) {
+                return "";
+            }
+            return [
+                Number(item.timestamp),
+                Number(item.pot_value),
+                Number(item.power_percent),
+                Number(item.temperature).toFixed(2)
+            ].join(":");
+        }
+
+        function dedupeMeasurements(items) {
+            const deduped = [];
+            const seen = new Set();
+
+            for (const rawItem of items || []) {
+                const item = normalizeMeasurement(rawItem, rawItem.timestamp);
+                if (!item || Number.isNaN(item.timestamp) || Number.isNaN(item.temperature)) {
+                    continue;
+                }
+
+                const key = measurementKey(item);
+                if (seen.has(key)) {
+                    continue;
+                }
+
+                seen.add(key);
+                deduped.push(item);
+            }
+
+            deduped.sort((left, right) => left.timestamp - right.timestamp);
+            return deduped;
+        }
+
+        function trimHistoryToCurrentPeriod(historySource) {
+            const config = HISTORY_PERIODS[state.selectedPeriod];
+            let trimmed = [...historySource];
+
+            if (config.periodSeconds) {
+                const cutoff = getCurrentTimestamp() - config.periodSeconds;
+                trimmed = trimmed.filter((item) => item.timestamp >= cutoff);
+            }
+
+            if (!config.all && trimmed.length > config.limit) {
+                trimmed = trimmed.slice(-config.limit);
+            }
+
+            return trimmed;
+        }
+
+        function mergeMeasurement(historySource, measurement) {
+            const merged = dedupeMeasurements(historySource);
+            const latestMeasurement = measurement ? {
+                ...measurement,
+                mqtt: getMqttStatus()
+            } : null;
+
+            if (!latestMeasurement) {
+                return merged;
+            }
+
+            const latestKey = measurementKey(latestMeasurement);
+            const existingIndex = merged.findIndex((item) => measurementKey(item) === latestKey);
+
+            if (existingIndex >= 0) {
+                merged[existingIndex] = {
+                    ...merged[existingIndex],
+                    ...latestMeasurement
+                };
+            } else {
+                merged.push(latestMeasurement);
+            }
+
+            merged.sort((left, right) => left.timestamp - right.timestamp);
+            return merged;
+        }
+
+        function reapplyHistoryWindow() {
+            state.history = trimHistoryToCurrentPeriod(state.fullHistory);
+        }
+
+        function interpolateColor(startHex, endHex, factor) {
+            const from = startHex.match(/\w\w/g).map((part) => parseInt(part, 16));
+            const to = endHex.match(/\w\w/g).map((part) => parseInt(part, 16));
+            const mixed = from.map((value, index) => Math.round(value + (to[index] - value) * factor));
+            return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp * 1000).toLocaleTimeString("ru-RU");
+        }
+
+        function formatDataAge(timestamp) {
+            if (!timestamp) {
+                return "Нет данных";
+            }
+
+            const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - Number(timestamp));
+            if (ageSeconds <= 1) {
+                return "Только что";
+            }
+            if (ageSeconds < 60) {
+                return `${ageSeconds} сек назад`;
+            }
+
+            const ageMinutes = Math.floor(ageSeconds / 60);
+            return `${ageMinutes} мин назад`;
+        }
+
+        function formatEventMeta(timestamp, fallback = "Ожидание MQTT-событий") {
+            if (!timestamp) {
+                return fallback;
+            }
+            return `${formatTime(timestamp)} / ${formatDataAge(timestamp)}`;
+        }
+
+        function formatSpan(seconds) {
+            if (!Number.isFinite(seconds) || seconds <= 0) {
+                return "Нет диапазона";
+            }
+
+            if (seconds < 60) {
+                return `${seconds} сек диапазон`;
+            }
+
+            const minutes = Math.floor(seconds / 60);
+            const restSeconds = seconds % 60;
+            if (restSeconds === 0) {
+                return `${minutes} мин диапазон`;
+            }
+
+            return `${minutes} мин ${restSeconds} сек`;
+        }
+
+        function getTrendInfo(history) {
+            if (history.length < 2) {
+                return {
+                    label: "Нет данных",
+                    delta: 0
+                };
+            }
+
+            const current = Number(history[history.length - 1].temperature);
+            const previous = Number(history[history.length - 2].temperature);
+            const delta = Number((current - previous).toFixed(2));
+
+            if (delta > 0.2) {
+                return { label: "Рост", delta };
+            }
+            if (delta < -0.2) {
+                return { label: "Падение", delta };
+            }
+
+            return { label: "Стабильно", delta };
+        }
+
+        function getPacketRate(history) {
+            if (history.length < 2) {
+                return 0;
+            }
+
+            const firstTs = Number(history[0].timestamp);
+            const lastTs = Number(history[history.length - 1].timestamp);
+            const spanSeconds = Math.max(1, lastTs - firstTs);
+            return Math.round((history.length / spanSeconds) * 60);
+        }
+
+        function markDeviceEvent(label, timestamp) {
+            state.device.lastEventLabel = label;
+            state.device.lastEventTimestamp = timestamp;
+        }
+
+        function applyDeviceSignalPayload(payload, timestamp = getCurrentTimestamp()) {
+            let handled = false;
+
+            if (Object.prototype.hasOwnProperty.call(payload, "button_start")) {
+                const isPressed = Number(payload.button_start) === 1;
+                state.device.startPressed = isPressed;
+                state.device.startTimestamp = timestamp;
+                if (isPressed) {
+                    state.device.stopPressed = false;
+                }
+                markDeviceEvent(isPressed ? "Команда Пуск выполнена" : "Пуск переведён в ожидание", timestamp);
+                handled = true;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(payload, "button_stop")) {
+                const isPressed = Number(payload.button_stop) === 1;
+                state.device.stopPressed = isPressed;
+                state.device.stopTimestamp = timestamp;
+                if (isPressed) {
+                    state.device.startPressed = false;
+                }
+                markDeviceEvent(isPressed ? "Команда Стоп выполнена" : "Стоп переведён в ожидание", timestamp);
+                handled = true;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(payload, "emergency")) {
+                state.device.emergencyActive = Number(payload.emergency) === 1;
+                state.device.emergencyTimestamp = timestamp;
+                if (state.device.emergencyActive) {
+                    state.device.startPressed = false;
+                }
+                markDeviceEvent(
+                    state.device.emergencyActive ? "Аварийная защита активирована" : "Авария снята",
+                    timestamp
+                );
+                handled = true;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(payload, "emergency_reset") && Number(payload.emergency_reset) === 1) {
+                state.device.emergencyActive = false;
+                state.device.emergencyTimestamp = timestamp;
+                state.device.stopPressed = false;
+                markDeviceEvent("Сброс аварии", timestamp);
+                handled = true;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(payload, "blue_blink")) {
+                state.device.blueBlinkEnabled = Number(payload.blue_blink) === 1;
+                state.device.blueCommandTimestamp = timestamp;
+                markDeviceEvent(
+                    state.device.blueBlinkEnabled ? "Синий LED переведён в режим мигания" : "Синий LED выключен",
+                    timestamp
+                );
+                handled = true;
+            }
+
+            return handled;
+        }
+
+        function renderPacketList(history) {
+            const items = history.slice(-5).reverse();
+
+            if (!items.length) {
+                elements.packetList.innerHTML = '<div class="telemetry-empty">Ожидание первых MQTT-сообщений.</div>';
+                return;
+            }
+
+            elements.packetList.innerHTML = items.map((item) => `
+                <div class="packet-row">
+                    <time>${formatTime(item.timestamp)}</time>
+                    <strong>${Number(item.temperature).toFixed(2)} °C</strong>
+                    <span>${item.power_percent} %</span>
+                    <span>pot ${item.pot_value}</span>
+                </div>
+            `).join("");
+        }
+
+        function renderDeviceControls(mqtt) {
+            const commandAvailable = Boolean(
+                state.mqtt.socket &&
+                state.mqtt.socket.readyState === WebSocket.OPEN &&
+                mqtt.connected &&
+                mqtt.subscribed
+            );
+
+            elements.commandCaption.textContent = commandAvailable
+                ? "Сигналы контроллера и MQTT-команды"
+                : "Нет связи с MQTT, команды с дашборда недоступны";
+            elements.commandTopicLabel.textContent = mqtt.command_topic;
+
+            elements.startState.textContent = state.device.startPressed ? "Активирован" : "Ожидание";
+            elements.startMeta.textContent = formatEventMeta(state.device.startTimestamp, "Команда Пуск ещё не поступала");
+
+            elements.stopState.textContent = state.device.stopPressed ? "Подан" : "Ожидание";
+            elements.stopMeta.textContent = formatEventMeta(state.device.stopTimestamp, "Команда Стоп ещё не поступала");
+
+            elements.emergencyState.textContent = state.device.emergencyActive ? "Активна" : "Нет";
+            elements.emergencyMeta.textContent = formatEventMeta(
+                state.device.emergencyTimestamp,
+                "Аварийных сообщений не было"
+            );
+
+            elements.blueLedState.textContent = state.device.blueBlinkEnabled ? "Мигание вкл" : "Мигание выкл";
+            elements.blueLedMeta.textContent = formatEventMeta(
+                state.device.blueCommandTimestamp,
+                "Команды с дашборда ещё не отправлялись"
+            );
+
+            elements.lastDeviceEvent.textContent = state.device.lastEventLabel;
+            elements.lastDeviceEventMeta.textContent = formatEventMeta(
+                state.device.lastEventTimestamp,
+                "Контроллер ещё не прислал событий кнопок или аварии"
+            );
+
+            elements.lastCommandStatus.textContent = state.device.lastCommandTimestamp
+                ? `${state.device.lastCommandLabel} / ${formatEventMeta(state.device.lastCommandTimestamp, "")}`
+                : "Команд ещё не было.";
+
+            elements.startCommand.disabled = !commandAvailable || state.device.emergencyActive;
+            elements.stopCommand.disabled = !commandAvailable;
+            elements.emergencyCommand.disabled = !commandAvailable || state.device.emergencyActive;
+            elements.resetEmergencyCommand.disabled = !commandAvailable || !state.device.emergencyActive;
+            elements.blueBlinkOn.disabled = !commandAvailable;
+            elements.blueBlinkOff.disabled = !commandAvailable;
+            elements.startCommand.classList.toggle("active", state.device.startPressed && !state.device.emergencyActive);
+            elements.stopCommand.classList.toggle("active", state.device.stopPressed);
+            elements.emergencyCommand.classList.toggle("active", state.device.emergencyActive);
+            elements.resetEmergencyCommand.classList.toggle("active", state.device.lastEventLabel === "Сброс аварии");
+            elements.blueBlinkOn.classList.toggle(
+                "active",
+                state.device.blueCommandTimestamp > 0 && state.device.blueBlinkEnabled
+            );
+            elements.blueBlinkOff.classList.toggle(
+                "active",
+                state.device.blueCommandTimestamp > 0 && !state.device.blueBlinkEnabled
+            );
+        }
+
+        function applyOptimisticCommandState(commandPayload, timestamp) {
+            if (Object.prototype.hasOwnProperty.call(commandPayload, "button_start") && Number(commandPayload.button_start) === 1) {
+                state.device.startPressed = true;
+                state.device.stopPressed = false;
+                state.device.startTimestamp = timestamp;
+                markDeviceEvent("Команда Пуск отправлена", timestamp);
+            }
+
+            if (Object.prototype.hasOwnProperty.call(commandPayload, "button_stop") && Number(commandPayload.button_stop) === 1) {
+                state.device.stopPressed = true;
+                state.device.startPressed = false;
+                state.device.stopTimestamp = timestamp;
+                markDeviceEvent("Команда Стоп отправлена", timestamp);
+            }
+
+            if (Object.prototype.hasOwnProperty.call(commandPayload, "emergency") && Number(commandPayload.emergency) === 1) {
+                state.device.emergencyActive = true;
+                state.device.emergencyTimestamp = timestamp;
+                state.device.startPressed = false;
+                markDeviceEvent("Команда Авария отправлена", timestamp);
+            }
+
+            if (Object.prototype.hasOwnProperty.call(commandPayload, "emergency_reset") && Number(commandPayload.emergency_reset) === 1) {
+                state.device.emergencyActive = false;
+                state.device.emergencyTimestamp = timestamp;
+                state.device.stopPressed = false;
+                markDeviceEvent("Команда Сброс аварии отправлена", timestamp);
+            }
+
+            if (Object.prototype.hasOwnProperty.call(commandPayload, "blue_blink")) {
+                state.device.blueBlinkEnabled = Number(commandPayload.blue_blink) === 1;
+                state.device.blueCommandTimestamp = timestamp;
+                markDeviceEvent(
+                    state.device.blueBlinkEnabled ? "Команда мигания синего LED отправлена" : "Команда выключения синего LED отправлена",
+                    timestamp
+                );
+            }
+        }
+
+        function setError(message) {
+            if (!message) {
+                elements.errorBanner.style.display = "none";
+                elements.errorBanner.textContent = "";
+                return;
+            }
+
+            elements.errorBanner.style.display = "block";
+            elements.errorBanner.textContent = message;
+        }
+
+        function updateStatusUi(kind, text) {
+            const colors = {
+                ok: { fill: "var(--ok)", shadow: "0 0 20px rgba(99, 230, 190, 0.5)" },
+                warn: { fill: "var(--warn)", shadow: "0 0 20px rgba(255, 159, 67, 0.5)" },
+                error: { fill: "var(--error)", shadow: "0 0 20px rgba(255, 93, 115, 0.5)" }
+            };
+
+            const visual = colors[kind] || colors.warn;
+            elements.statusDot.style.background = visual.fill;
+            elements.statusDot.style.boxShadow = visual.shadow;
+            elements.statusText.textContent = text;
+        }
+
+        function setPeriod(periodKey) {
+            state.selectedPeriod = periodKey;
+            for (const button of elements.periodButtons.querySelectorAll("button")) {
+                button.classList.toggle("active", button.dataset.period === periodKey);
+            }
+            elements.historyCaption.textContent = `${HISTORY_PERIODS[periodKey].label} / MQTT live`;
+            reapplyHistoryWindow();
+            render();
+        }
+
+        function nextPacketId() {
+            const packetId = state.mqtt.packetId;
+            state.mqtt.packetId = state.mqtt.packetId >= 65535 ? 1 : state.mqtt.packetId + 1;
+            return packetId;
+        }
+
+        function concatBytes(...chunks) {
+            const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+
+            for (const chunk of chunks) {
+                result.set(chunk, offset);
+                offset += chunk.length;
+            }
+
+            return result;
+        }
+
+        function encodeRemainingLength(length) {
+            const encoded = [];
+            let value = length;
+
+            do {
+                let digit = value % 128;
+                value = Math.floor(value / 128);
+                if (value > 0) {
+                    digit |= 0x80;
+                }
+                encoded.push(digit);
+            } while (value > 0);
+
+            return Uint8Array.from(encoded);
+        }
+
+        function encodeMqttString(value) {
+            const encoded = new TextEncoder().encode(value);
+            return concatBytes(
+                Uint8Array.of((encoded.length >> 8) & 0xff, encoded.length & 0xff),
+                encoded
+            );
+        }
+
+        function buildConnectPacket() {
+            const variableHeader = concatBytes(
+                encodeMqttString("MQTT"),
+                Uint8Array.of(0x04, 0x02, (KEEP_ALIVE_SECONDS >> 8) & 0xff, KEEP_ALIVE_SECONDS & 0xff)
+            );
+            const payload = encodeMqttString(CLIENT_ID);
+            const body = concatBytes(variableHeader, payload);
+
+            return concatBytes(
+                Uint8Array.of(0x10),
+                encodeRemainingLength(body.length),
+                body
+            );
+        }
+
+        function buildSubscribePacket(topic) {
+            const packetId = nextPacketId();
+            const variableHeader = Uint8Array.of((packetId >> 8) & 0xff, packetId & 0xff);
+            const payload = concatBytes(encodeMqttString(topic), Uint8Array.of(0x00));
+            const body = concatBytes(variableHeader, payload);
+
+            return concatBytes(
+                Uint8Array.of(0x82),
+                encodeRemainingLength(body.length),
+                body
+            );
+        }
+
+        function buildPublishPacket(topic, payloadText) {
+            const variableHeader = encodeMqttString(topic);
+            const payload = new TextEncoder().encode(payloadText);
+            const body = concatBytes(variableHeader, payload);
+
+            return concatBytes(
+                Uint8Array.of(0x30),
+                encodeRemainingLength(body.length),
+                body
+            );
+        }
+
+        function buildPingPacket() {
+            return Uint8Array.of(0xc0, 0x00);
+        }
+
+        function clearReconnectTimer() {
+            if (state.mqtt.reconnectTimer) {
+                clearTimeout(state.mqtt.reconnectTimer);
+                state.mqtt.reconnectTimer = null;
+            }
+        }
+
+        function clearPingTimer() {
+            if (state.mqtt.pingTimer) {
+                clearInterval(state.mqtt.pingTimer);
+                state.mqtt.pingTimer = null;
+            }
+        }
+
+        function startPingTimer() {
+            clearPingTimer();
+            state.mqtt.pingTimer = window.setInterval(() => {
+                if (state.mqtt.socket && state.mqtt.socket.readyState === WebSocket.OPEN) {
+                    state.mqtt.socket.send(buildPingPacket());
+                }
+            }, Math.max(10000, KEEP_ALIVE_SECONDS * 500));
+        }
+
+        function scheduleReconnect() {
+            if (state.mqtt.reconnectTimer || !state.pollingEnabled) {
+                return;
+            }
+
+            state.mqtt.reconnectTimer = window.setTimeout(() => {
+                state.mqtt.reconnectTimer = null;
+                connectMqtt();
+            }, RECONNECT_DELAY_MS);
+        }
+
+        function disconnectSocket() {
+            clearPingTimer();
+            if (state.mqtt.socket) {
+                state.mqtt.socket.onopen = null;
+                state.mqtt.socket.onmessage = null;
+                state.mqtt.socket.onerror = null;
+                state.mqtt.socket.onclose = null;
+                try {
+                    state.mqtt.socket.close();
+                } catch (error) {
+                    console.error(error);
+                }
+                state.mqtt.socket = null;
+            }
+        }
+
+        function connectMqtt(forceReconnect = false) {
+            if (forceReconnect) {
+                disconnectSocket();
+                state.mqtt.connected = false;
+                state.mqtt.subscribed = false;
+            }
+
+            if (
+                state.mqtt.socket &&
+                (state.mqtt.socket.readyState === WebSocket.OPEN || state.mqtt.socket.readyState === WebSocket.CONNECTING)
+            ) {
+                return;
+            }
+
+            clearReconnectTimer();
+            setError("");
+            state.mqtt.lastError = null;
+
+            const socket = new WebSocket(`ws://${BROKER_HOST}:${MQTT_WS_PORT}`, ["mqtt"]);
+            socket.binaryType = "arraybuffer";
+            state.mqtt.socket = socket;
+            render();
+
+            socket.onopen = () => {
+                socket.send(buildConnectPacket());
+            };
+
+            socket.onmessage = (event) => {
+                handleSocketMessage(event.data);
+            };
+
+            socket.onerror = () => {
+                state.mqtt.lastError = "Ошибка WebSocket-соединения с MQTT";
+                render();
+            };
+
+            socket.onclose = () => {
+                if (state.mqtt.socket === socket) {
+                    state.mqtt.socket = null;
+                }
+                clearPingTimer();
+                state.mqtt.connected = false;
+                state.mqtt.subscribed = false;
+                if (!state.mqtt.lastError) {
+                    state.mqtt.lastError = "Соединение с MQTT-брокером закрыто";
+                }
+                render();
+                scheduleReconnect();
+            };
+        }
+
+        function handleSocketMessage(data) {
+            const bytes = new Uint8Array(data);
+            let offset = 0;
+
+            while (offset < bytes.length) {
+                const header = bytes[offset++];
+                let remainingLength = 0;
+                let multiplier = 1;
+                let encodedByte = 0;
+
+                do {
+                    encodedByte = bytes[offset++];
+                    remainingLength += (encodedByte & 127) * multiplier;
+                    multiplier *= 128;
+                } while ((encodedByte & 128) !== 0 && offset < bytes.length);
+
+                const packet = bytes.slice(offset, offset + remainingLength);
+                offset += remainingLength;
+
+                handleMqttPacket(header, packet);
+            }
+        }
+
+        function handleMqttPacket(header, packet) {
+            const packetType = header >> 4;
+
+            if (packetType === 2) {
+                handleConnack(packet);
+                return;
+            }
+
+            if (packetType === 3) {
+                handlePublish(header, packet);
+                return;
+            }
+
+            if (packetType === 9) {
+                state.mqtt.subscribed = true;
+                state.mqtt.lastError = null;
+                render();
+                return;
+            }
+        }
+
+        function handleConnack(packet) {
+            const returnCode = packet[1];
+
+            if (returnCode === 0) {
+                state.mqtt.connected = true;
+                state.mqtt.subscribed = false;
+                state.mqtt.lastError = null;
+                startPingTimer();
+                state.mqtt.socket.send(buildSubscribePacket(MQTT_TOPIC));
+                render();
+                return;
+            }
+
+            state.mqtt.connected = false;
+            state.mqtt.subscribed = false;
+            state.mqtt.lastError = `MQTT CONNACK error code ${returnCode}`;
+            render();
+            scheduleReconnect();
+        }
+
+        function handlePublish(header, packet) {
+            const qos = (header >> 1) & 0x03;
+            const topicLength = (packet[0] << 8) + packet[1];
+            const topic = new TextDecoder().decode(packet.slice(2, 2 + topicLength));
+            let payloadOffset = 2 + topicLength;
+
+            if (qos > 0) {
+                payloadOffset += 2;
+            }
+
+            const payload = new TextDecoder().decode(packet.slice(payloadOffset));
+            if (topic !== MQTT_TOPIC) {
+                return;
+            }
+
+            handleIncomingPayload(payload);
+        }
+
+        function handleIncomingPayload(payloadText) {
+            try {
+                const parsed = JSON.parse(payloadText);
+                const timestamp = getCurrentTimestamp();
+                const hasMeasurement = isMeasurementPayload(parsed);
+                const hasSignal = applyDeviceSignalPayload(parsed, timestamp);
+
+                if (hasMeasurement) {
+                    const measurement = normalizeMeasurement(parsed, timestamp);
+                    state.latest = measurement;
+                    state.fullHistory = mergeMeasurement(state.fullHistory, measurement);
+                    reapplyHistoryWindow();
+                }
+
+                if (!hasMeasurement && !hasSignal) {
+                    throw new Error("MQTT payload does not match measurement or control-event format");
+                }
+
+                setError("");
+                state.mqtt.lastError = null;
+                if (state.pollingEnabled) {
+                    render();
+                }
+            } catch (error) {
+                state.mqtt.lastError = `Ошибка MQTT-сообщения: ${error.message}`;
+                setError(state.mqtt.lastError);
+                render();
+            }
+        }
+
+        function publishDashboardCommand(commandPayload, label) {
+            const commandAvailable = Boolean(
+                state.mqtt.socket &&
+                state.mqtt.socket.readyState === WebSocket.OPEN &&
+                state.mqtt.connected &&
+                state.mqtt.subscribed
+            );
+
+            if (!commandAvailable) {
+                state.mqtt.lastError = "Нет связи с MQTT: команда с дашборда не отправлена";
+                setError(state.mqtt.lastError);
+                render();
+                return;
+            }
+
+            try {
+                const payloadText = JSON.stringify(commandPayload);
+                const timestamp = getCurrentTimestamp();
+                state.mqtt.socket.send(buildPublishPacket(MQTT_COMMAND_TOPIC, payloadText));
+                state.device.lastCommandLabel = label;
+                state.device.lastCommandTimestamp = timestamp;
+                applyOptimisticCommandState(commandPayload, timestamp);
+
+                if (Object.prototype.hasOwnProperty.call(commandPayload, "blue_blink")) {
+                    state.device.blueBlinkEnabled = Number(commandPayload.blue_blink) === 1;
+                    state.device.blueCommandTimestamp = timestamp;
+                }
+
+                setError("");
+                state.mqtt.lastError = null;
+                render();
+            } catch (error) {
+                state.mqtt.lastError = `Команда MQTT не отправлена: ${error.message}`;
+                setError(state.mqtt.lastError);
+                render();
+            }
+        }
+
+        function drawHistoryChart() {
+            const canvas = elements.historyCanvas;
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+
+            canvas.width = Math.max(320, Math.round(rect.width * dpr));
+            canvas.height = Math.max(240, Math.round(rect.height * dpr));
+
+            const ctx = canvas.getContext("2d");
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const width = rect.width;
+            const height = rect.height;
+            ctx.clearRect(0, 0, width, height);
+
+            const padding = { top: 20, right: 18, bottom: 42, left: 54 };
+            const plotWidth = width - padding.left - padding.right;
+            const plotHeight = height - padding.top - padding.bottom;
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+            ctx.fillStyle = "rgba(236, 244, 255, 0.72)";
+            ctx.lineWidth = 1;
+            ctx.font = "12px Segoe UI Variable";
+
+            if (!state.history.length) {
+                ctx.fillStyle = "rgba(236, 244, 255, 0.78)";
+                ctx.font = "600 18px Segoe UI Variable";
+                ctx.fillText("Нет данных. Ожидается первое MQTT-сообщение.", 24, height / 2);
+                return;
+            }
+
+            const temperatures = state.history.map((item) => Number(item.temperature));
+            const timestamps = state.history.map((item) => Number(item.timestamp));
+
+            let minTemp = Math.min(...temperatures);
+            let maxTemp = Math.max(...temperatures);
+            const spread = Math.max(4, maxTemp - minTemp);
+            minTemp = clamp(minTemp - spread * 0.15, 0, 100);
+            maxTemp = clamp(maxTemp + spread * 0.15, 0, 100);
+            if (Math.abs(maxTemp - minTemp) < 0.5) {
+                maxTemp = clamp(maxTemp + 2, 0, 100);
+                minTemp = clamp(minTemp - 2, 0, 100);
+            }
+
+            const firstTs = timestamps[0];
+            const lastTs = timestamps[timestamps.length - 1];
+            const tsSpan = Math.max(1, lastTs - firstTs);
+            const tempSpan = Math.max(1, maxTemp - minTemp);
+
+            const xFor = (ts) => padding.left + ((ts - firstTs) / tsSpan) * plotWidth;
+            const yFor = (temp) => padding.top + (1 - (temp - minTemp) / tempSpan) * plotHeight;
+
+            for (let line = 0; line <= 4; line += 1) {
+                const y = padding.top + (plotHeight / 4) * line;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+
+                const value = maxTemp - (tempSpan / 4) * line;
+                ctx.fillStyle = "rgba(236, 244, 255, 0.65)";
+                ctx.fillText(`${value.toFixed(1)}°`, 8, y + 4);
+            }
+
+            const tickCount = Math.min(4, state.history.length - 1);
+            for (let tick = 0; tick <= tickCount; tick += 1) {
+                const index = Math.round((state.history.length - 1) * (tick / Math.max(1, tickCount)));
+                const item = state.history[index];
+                const x = xFor(item.timestamp);
+
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, height - padding.bottom);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+                ctx.stroke();
+
+                ctx.fillStyle = "rgba(236, 244, 255, 0.65)";
+                ctx.fillText(formatTime(item.timestamp), x - 22, height - 14);
+            }
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.beginPath();
+            ctx.moveTo(padding.left, height - padding.bottom);
+            ctx.lineTo(width - padding.right, height - padding.bottom);
+            ctx.stroke();
+
+            ctx.beginPath();
+            state.history.forEach((item, index) => {
+                const x = xFor(item.timestamp);
+                const y = yFor(item.temperature);
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            const areaGradient = ctx.createLinearGradient(0, padding.top, 0, height);
+            areaGradient.addColorStop(0, "rgba(255, 111, 77, 0.34)");
+            areaGradient.addColorStop(1, "rgba(75, 194, 255, 0.04)");
+
+            const lineGradient = ctx.createLinearGradient(padding.left, 0, width - padding.right, 0);
+            lineGradient.addColorStop(0, "rgba(75, 194, 255, 1)");
+            lineGradient.addColorStop(1, "rgba(255, 111, 77, 1)");
+
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = lineGradient;
+            ctx.stroke();
+
+            ctx.beginPath();
+            state.history.forEach((item, index) => {
+                const x = xFor(item.timestamp);
+                const y = yFor(item.temperature);
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.lineTo(xFor(state.history[state.history.length - 1].timestamp), height - padding.bottom);
+            ctx.lineTo(xFor(state.history[0].timestamp), height - padding.bottom);
+            ctx.closePath();
+            ctx.fillStyle = areaGradient;
+            ctx.fill();
+
+            const last = state.history[state.history.length - 1];
+            const dotX = xFor(last.timestamp);
+            const dotY = yFor(last.temperature);
+
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffd166";
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 11, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(255, 209, 102, 0.24)";
+            ctx.lineWidth = 6;
+            ctx.stroke();
+        }
+
+        function hexPoints(cx, cy, size) {
+            const points = [];
+            for (let side = 0; side < 6; side += 1) {
+                const angle = (Math.PI / 180) * (60 * side - 30);
+                const x = cx + size * Math.cos(angle);
+                const y = cy + size * Math.sin(angle);
+                points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+            }
+            return points.join(" ");
+        }
+
+        function generateRodLayout() {
+            const rods = [];
+            const center = 260;
+            const radius = 218;
+            let chosenSize = 11;
+
+            for (let size = 16; size >= 9; size -= 1) {
+                const candidates = [];
+                for (let r = -15; r <= 15; r += 1) {
+                    for (let q = -15; q <= 15; q += 1) {
+                        const x = center + size * Math.sqrt(3) * (q + r / 2);
+                        const y = center + size * 1.5 * r;
+                        const distance = Math.hypot(x - center, y - center);
+                        if (distance < radius - size * 1.18) {
+                            candidates.push({
+                                x,
+                                y,
+                                distance,
+                                angle: Math.atan2(y - center, x - center)
+                            });
+                        }
+                    }
+                }
+
+                candidates.sort((left, right) => left.distance - right.distance || left.angle - right.angle);
+                if (candidates.length >= 190) {
+                    chosenSize = size;
+                    candidates.slice(0, 190).forEach((item, index) => rods.push({ ...item, size: chosenSize, index }));
+                    break;
+                }
+            }
+
+            return rods;
+        }
+
+        function buildReactorCore() {
+            const svg = elements.reactorCore;
+            const ns = "http://www.w3.org/2000/svg";
+            state.rods = generateRodLayout();
+
+            svg.innerHTML = "";
+
+            const defs = document.createElementNS(ns, "defs");
+            defs.innerHTML = `
+                <radialGradient id="coreBg" cx="50%" cy="45%" r="60%">
+                    <stop offset="0%" stop-color="rgba(255,255,255,0.10)"></stop>
+                    <stop offset="100%" stop-color="rgba(255,255,255,0.02)"></stop>
+                </radialGradient>
+            `;
+            svg.appendChild(defs);
+
+            const outerCircle = document.createElementNS(ns, "circle");
+            outerCircle.setAttribute("cx", "260");
+            outerCircle.setAttribute("cy", "260");
+            outerCircle.setAttribute("r", "234");
+            outerCircle.setAttribute("fill", "rgba(255,255,255,0.03)");
+            outerCircle.setAttribute("stroke", "rgba(255, 255, 255, 0.18)");
+            outerCircle.setAttribute("stroke-width", "2");
+            svg.appendChild(outerCircle);
+
+            const innerCircle = document.createElementNS(ns, "circle");
+            innerCircle.setAttribute("cx", "260");
+            innerCircle.setAttribute("cy", "260");
+            innerCircle.setAttribute("r", "220");
+            innerCircle.setAttribute("fill", "url(#coreBg)");
+            innerCircle.setAttribute("stroke", "rgba(255, 209, 102, 0.18)");
+            innerCircle.setAttribute("stroke-width", "1.5");
+            svg.appendChild(innerCircle);
+
+            const rodsGroup = document.createElementNS(ns, "g");
+            rodsGroup.setAttribute("id", "rodsGroup");
+            svg.appendChild(rodsGroup);
+
+            state.rods.forEach((rod) => {
+                const polygon = document.createElementNS(ns, "polygon");
+                polygon.setAttribute("points", hexPoints(rod.x, rod.y, rod.size));
+                polygon.setAttribute("fill", "rgba(75, 194, 255, 0.8)");
+                polygon.setAttribute("stroke", "rgba(255,255,255,0.18)");
+                polygon.setAttribute("stroke-width", "1");
+                polygon.setAttribute("data-index", String(rod.index));
+                rodsGroup.appendChild(polygon);
+                rod.element = polygon;
+            });
+        }
+
+        function updateReactorCore(powerPercent) {
+            const activeCount = Math.round((clamp(powerPercent, 0, 100) / 100) * state.rods.length);
+
+            state.rods.forEach((rod, index) => {
+                const isActive = index < activeCount;
+                let fill;
+
+                if (isActive) {
+                    const factor = activeCount <= 1 ? 1 : index / (activeCount - 1);
+                    fill = interpolateColor("ffb347", "c81d25", factor);
+                } else {
+                    const coldIndex = index - activeCount;
+                    const coldCount = Math.max(1, state.rods.length - activeCount);
+                    const factor = coldCount <= 1 ? 0 : coldIndex / (coldCount - 1);
+                    fill = interpolateColor("7fe3ff", "1a4b96", factor);
+                }
+
+                rod.element.setAttribute("fill", fill);
+            });
+
+            elements.activeRods.textContent = `${activeCount} / ${state.rods.length}`;
+            elements.coreCaption.textContent = `190 шестигранных элементов, активировано ${powerPercent}%`;
+        }
+
+        function render() {
+            const latest = state.latest;
+            const history = state.history;
+            const mqtt = getMqttStatus();
+
+            elements.historyCount.textContent = String(history.length);
+            elements.packetRate.textContent = `${getPacketRate(history)} pkt/min`;
+            renderDeviceControls(mqtt);
+
+            if (!latest) {
+                elements.currentTemp.textContent = "--.--";
+                elements.powerPercent.textContent = "-- %";
+                elements.potValue.textContent = "----";
+                elements.lastTimestamp.textContent = "--:--:--";
+                elements.dataAge.textContent = "Нет данных";
+                elements.mqttState.textContent = mqtt.connected ? "Подключено" : "Отключено";
+                elements.minTemp.textContent = "--.-- °C";
+                elements.maxTemp.textContent = "--.-- °C";
+                elements.avgTemp.textContent = "Среднее: --.-- °C";
+                elements.trendLabel.textContent = "Нет данных";
+                elements.deltaTemp.textContent = "Изменение: --.-- °C";
+                elements.windowSpan.textContent = "Нет диапазона";
+                renderPacketList([]);
+
+                if (!state.pollingEnabled) {
+                    updateStatusUi("warn", "Автообновление на паузе");
+                } else if (state.device.emergencyActive) {
+                    updateStatusUi("error", "На ESP32 активирована аварийная защита");
+                } else if (mqtt.connected && mqtt.subscribed) {
+                    updateStatusUi("warn", "MQTT подключен, ожидание первого сообщения");
+                } else if (mqtt.connected) {
+                    updateStatusUi("warn", "MQTT подключен, ожидается подтверждение подписки");
+                } else if (mqtt.last_error) {
+                    updateStatusUi("error", mqtt.last_error);
+                } else {
+                    updateStatusUi("warn", "Подключение к MQTT-брокеру...");
+                }
+
+                drawHistoryChart();
+                updateReactorCore(0);
+                return;
+            }
+
+            const temperatures = history.map((item) => Number(item.temperature));
+            const minTemp = temperatures.length ? Math.min(...temperatures) : Number(latest.temperature);
+            const maxTemp = temperatures.length ? Math.max(...temperatures) : Number(latest.temperature);
+            const avgTemp = temperatures.length
+                ? temperatures.reduce((sum, value) => sum + value, 0) / temperatures.length
+                : Number(latest.temperature);
+            const firstTs = history.length ? Number(history[0].timestamp) : Number(latest.timestamp);
+            const lastTs = history.length ? Number(history[history.length - 1].timestamp) : Number(latest.timestamp);
+            const trend = getTrendInfo(history);
+
+            elements.currentTemp.textContent = Number(latest.temperature).toFixed(2);
+            elements.powerPercent.textContent = `${latest.power_percent} %`;
+            elements.potValue.textContent = String(latest.pot_value);
+            elements.lastTimestamp.textContent = formatTime(latest.timestamp);
+            elements.dataAge.textContent = formatDataAge(latest.timestamp);
+            elements.mqttState.textContent = mqtt.connected ? (mqtt.subscribed ? "Подключено" : "Подписка...") : "Отключено";
+            elements.minTemp.textContent = `${minTemp.toFixed(2)} °C`;
+            elements.maxTemp.textContent = `${maxTemp.toFixed(2)} °C`;
+            elements.avgTemp.textContent = `Среднее: ${avgTemp.toFixed(2)} °C`;
+            elements.trendLabel.textContent = trend.label;
+            elements.deltaTemp.textContent = `Изменение: ${trend.delta >= 0 ? "+" : ""}${trend.delta.toFixed(2)} °C`;
+            elements.windowSpan.textContent = formatSpan(Math.max(0, lastTs - firstTs));
+            renderPacketList(history);
+
+            if (!state.pollingEnabled) {
+                updateStatusUi("warn", "Автообновление на паузе");
+            } else if (state.device.emergencyActive) {
+                updateStatusUi("error", "На ESP32 активирована аварийная защита");
+            } else if (mqtt.connected && mqtt.subscribed) {
+                const ageSeconds = Math.max(0, getCurrentTimestamp() - Number(latest.timestamp));
+                if (ageSeconds <= 2) {
+                    updateStatusUi("ok", `MQTT подключен, новое измерение ${formatDataAge(latest.timestamp)}`);
+                } else {
+                    updateStatusUi("warn", `MQTT подключен, но новых данных нет уже ${formatDataAge(latest.timestamp)}`);
+                }
+            } else if (mqtt.connected) {
+                updateStatusUi("warn", "MQTT подключен, ожидается подтверждение подписки");
+            } else {
+                updateStatusUi("error", mqtt.last_error || "Нет связи с MQTT-брокером");
+            }
+
+            drawHistoryChart();
+            updateReactorCore(Number(latest.power_percent));
+        }
+
+        elements.togglePolling.addEventListener("click", () => {
+            state.pollingEnabled = !state.pollingEnabled;
+            elements.togglePolling.textContent = state.pollingEnabled ? "Пауза" : "Старт";
+            render();
+            if (state.pollingEnabled) {
+                if (!state.mqtt.socket || state.mqtt.socket.readyState === WebSocket.CLOSED) {
+                    connectMqtt();
+                }
+                render();
+            }
+        });
+
+        elements.forceRefresh.addEventListener("click", () => {
+            connectMqtt(true);
+            render();
+        });
+
+        elements.startCommand.addEventListener("click", () => {
+            publishDashboardCommand({ button_start: 1 }, "Отправлено button_start=1");
+        });
+
+        elements.stopCommand.addEventListener("click", () => {
+            publishDashboardCommand({ button_stop: 1 }, "Отправлено button_stop=1");
+        });
+
+        elements.emergencyCommand.addEventListener("click", () => {
+            publishDashboardCommand({ emergency: 1 }, "Отправлено emergency=1");
+        });
+
+        elements.resetEmergencyCommand.addEventListener("click", () => {
+            publishDashboardCommand({ emergency_reset: 1 }, "Отправлено emergency_reset=1");
+        });
+
+        elements.blueBlinkOn.addEventListener("click", () => {
+            publishDashboardCommand({ blue_blink: 1 }, "Отправлено blue_blink=1");
+        });
+
+        elements.blueBlinkOff.addEventListener("click", () => {
+            publishDashboardCommand({ blue_blink: 0 }, "Отправлено blue_blink=0");
+        });
+
+        elements.periodButtons.addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-period]");
+            if (!button) {
+                return;
+            }
+            setPeriod(button.dataset.period);
+        });
+
+        window.addEventListener("resize", () => drawHistoryChart());
+
+        buildReactorCore();
+        reapplyHistoryWindow();
+        render();
+        elements.historyCaption.textContent = `${HISTORY_PERIODS[state.selectedPeriod].label} / MQTT live`;
+        connectMqtt();
+        window.setInterval(() => {
+            if (state.latest || state.mqtt.connected || state.mqtt.lastError) {
+                render();
+            }
+            if (
+                state.pollingEnabled &&
+                (!state.mqtt.socket || state.mqtt.socket.readyState === WebSocket.CLOSED) &&
+                !state.mqtt.reconnectTimer
+            ) {
+                connectMqtt();
+            }
+        }, RENDER_INTERVAL_MS);
+    </script>
+</body>
+</html>
