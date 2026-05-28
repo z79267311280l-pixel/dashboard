@@ -2329,14 +2329,11 @@
         }
 
         function setupAR() {
-            document.getElementById('arButtonFinal').addEventListener('click', () => {
-                if (!renderer.xr) { alert('WebXR не поддерживается'); return; }
-                const btn = ARButton.createButton(renderer, { requiredFeatures: ['local-floor'] });
-                document.body.appendChild(btn);
-                btn.click();
-                setTimeout(() => btn.remove(), 1500);
-            });
-        }
+    const GITHUB_URL = 'https://z79267311280l-pixel.github.io/AR_reactor/';
+    document.getElementById('arButtonFinal').addEventListener('click', () => {
+        window.open(GITHUB_URL, '_blank');
+    });
+}
 
         function syncPower() {
             const update = () => {
